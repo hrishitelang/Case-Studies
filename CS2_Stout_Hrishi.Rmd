@@ -1,0 +1,155 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+# There is 1 dataset(csv) with 3 years worth of customer orders. There are 4 columns in the csv dataset: index, CUSTOMER_EMAIL(unique identifier as hash), Net_Revenue, and Year.
+
+# For each year we need the following information:
+# •	Total revenue for the current year
+# •	New Customer Revenue e.g. new customers not present in previous year only
+# •	Existing Customer Growth. To calculate this, use the Revenue of existing customers for current year –(minus) Revenue of existing customers from the previous year
+# •	Revenue lost from attrition
+# •	Existing Customer Revenue Current Year
+# •	Existing Customer Revenue Prior Year
+# •	Total Customers Current Year
+# •	Total Customers Previous Year
+# •	New Customers
+# •	Lost Customers
+# Additionally, generate a few unique plots highlighting some information from the dataset. Are there any interesting observations?
+
+# Data Preparation:
+## First, let us load our dataset to conduct our analysis:
+```{r}
+library(readr)
+dataset <- read.csv('casestudy.csv')
+```
+
+# I converted the row X to be a row index using the mutate() function of the tidyverse library and row_number():
+```{r}
+library(tidyverse)
+dataset <- dataset %>% mutate(X = row_number())
+```
+
+#Let us check the summary and overall structure of the dataset:
+```{r}
+summary(dataset)
+```
+
+```{r}
+str(dataset)
+```
+# We are checking the head and tail of the dataset:
+```{r}
+head(dataset)
+tail(dataset)
+```
+
+# I am using the DataExplorer library to check the null values in the dataset:
+```{r}
+library(DataExplorer) #Automated data exploration process for analytic tasks and predictive modeling
+plot_missing(dataset)
+```
+We can see that there are no null values. Thus, the dataset is clean.
+
+# Let us check how many years do we have in the dataset:
+```{r}
+dataset %>% group_by(`year`) %>% summarise(Count = n())
+ggplot(dataset, aes(x=dataset$year, y=dataset$n)) + geom_bar(stat="identity") + labs(x="Year", y="Count") 
+```
+# We can see that there are 3 years: 2015, 2016 and 2017. Thus throughout our analyses we shall assume the following:
+# Current Year = 2017
+# Previous Year = 2016
+
+```{r}
+boxplot(dataset$net_revenue, main="Distribution of revenue", xlab="Total Revenue")
+```
+
+```{r}
+library(ggplot2)
+ggp <- ggplot(dataset, aes(dataset$net_revenue, fill = dataset$year)) +  # Create ggplot2 histogram with default colors
+  geom_histogram()
+ggp  
+```
+
+We can also observe from the datatset that there are more rows for the 2017 dataset.
+
+# 1. Total revenue for the current year:
+```{r}
+dataset %>% group_by(`year`) %>% summarise(TotalRevenue = sum(net_revenue)) %>% filter(`year` == 2017)
+```
+Thus, the total revenue for the current year is $31,417,495
+
+# 2. New Customer Revenue e.g. new customers not present in previous year only
+```{r}
+# We create three separate datasets using filter() to make our coding easier
+dataset_2017 <- dataset %>% filter(`year` == 2017) 
+dataset_2016 <- dataset %>% filter(`year` == 2016)
+dataset_2015 <- dataset %>% filter(`year` == 2015)
+
+#We perform anti_join() to find out columns which weren't considered in dataset_2017 between the years 2016 and 2017. We also took the same between 2015 and 2016 as the previous year can allude both with respect to 2015 and 2016: 
+NewCust_2017 <- anti_join(dataset_2017, dataset_2016, by = c("customer_email" = "customer_email"))
+NewCust_2016 <- anti_join(dataset_2016, dataset_2015, by = c("customer_email" = "customer_email"))
+
+#We perform revenue sum of both the datstets obtained in the previous test:
+NewCust_2017 %>% summarise(RevenueNewCust_2017 = sum(net_revenue))
+NewCust_2016 %>% summarise(RevenueNewCust_2016 = sum(net_revenue))
+```
+The New Customer Revenue of 2017 is $28,776,235
+The New Customer Revenue of 2016 is $18,245,491
+
+# •	Existing Customer Growth. To calculate this, use the Revenue of existing customers for current year –(minus) Revenue of existing customers from the previous year
+```{r}
+a <- ExistingCust_2017 %>% inner_join(ExistingCust_2016, by="customer_email")
+a$CustomerGrowth <- a$net_revenue.x.x - a$net_revenue.y.x
+head(a)
+```
+
+# •	Revenue lost from attrition
+```{r}
+#To calculate revenue lost from attrition we have to find out the customers lost from attrition. Again, in this case, we have to find out columns of customers in 2016 that doesn't appear in 2017 using the anti_join statement:
+CustAttr_2017 <- anti_join(dataset_2016, dataset_2017, by = c("customer_email" = "customer_email"))
+
+#We perform the same for years 2015 and 2016
+CustAttr_2016 <- anti_join(dataset_2015, dataset_2016, by = c("customer_email" = "customer_email"))
+
+#We perform the total operation using sum()
+CustAttr_2017 %>% summarise(RevenueCustAttr_2017 = sum(net_revenue))
+CustAttr_2016 %>% summarise(RevenueCustAttr_2016 = sum(net_revenue))
+```
+
+# •	Existing Customer Revenue Current Year
+```{r}
+#Existing customers only can be present at the intersection of customers of 2016 and 2017
+ExistingCust_2017 <- dataset_2017 %>% inner_join(dataset_2016, by="customer_email")
+ExistingCust_2017 %>% summarise(ExistingCust_2017 = sum(net_revenue.x))
+```
+Existing Customer Revenue Current Year is $2,641,260
+# •	Existing Customer Revenue Prior Year
+```{r}
+#Existing customers only can be present at the intersection of customers of 2015 and 2016
+ExistingCust_2016 <- dataset_2016 %>% inner_join(dataset_2015, by="customer_email")
+ExistingCust_2016 %>% summarise(ExistingCust_2016 = sum(net_revenue.x))
+```
+Existing Customer Revenue Prior Year is $7,485,453
+
+# •	Total Customers Current Year
+```{r}
+dataset_2017 %>% summarise(Count = n())
+```
+We have 249987 Customer rows for Current Year (2017)
+# •	Total Customers Previous Year
+```{r}
+dataset_2016 %>% summarise(Count = n())
+```
+We have 249987 Customer rows for Previous Year (2016)
+# •	New Customers
+```{r}
+NewCust_2017 %>% summarise(Count = n())
+```
+We got 229028 New Customers
+# •	Lost Customers
+```{r}
+CustAttr_2017 %>% summarise(Count = n())
+```
+We lost 183687 Customers
